@@ -103,8 +103,10 @@ static bool bcm_apple_probe(struct bcm_device *dev)
 	const union acpi_object *obj;
 
 	if (!acpi_dev_get_property(adev, "baud", ACPI_TYPE_BUFFER, &obj) &&
-	    obj->buffer.length == 8)
+	    obj->buffer.length == 8) {
 		dev->oper_speed = *(u64 *)obj->buffer.pointer;
+		dev_info(&dev->pdev->dev, "oper_speed=%u\n", dev->oper_speed);
+	}
 
 	return ACPI_SUCCESS(acpi_get_handle(dev_handle, "BTLP", &dev->btlp)) &&
 	       ACPI_SUCCESS(acpi_get_handle(dev_handle, "BTPU", &dev->btpu)) &&
@@ -810,6 +812,8 @@ static int bcm_platform_probe(struct bcm_device *dev)
 	     (!x86_apple_machine || !bcm_apple_probe(dev))) ||
 	    !dev->name) {
 		dev_err(&pdev->dev, "invalid platform data\n");
+		dev_err(&pdev->dev, "btlp=%p, btpu=%p, btpd=%p\n",
+			dev->btlp, dev->btpu, dev->btpd);
 		return -EINVAL;
 	}
 
