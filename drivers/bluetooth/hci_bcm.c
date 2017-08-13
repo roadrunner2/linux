@@ -27,6 +27,7 @@
 #include <linux/firmware.h>
 #include <linux/module.h>
 #include <linux/acpi.h>
+#include <linux/platform_data/x86/apple.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
 #include <linux/gpio/consumer.h>
@@ -58,13 +59,16 @@ struct bcm_device {
 	struct clk		*clk;
 	bool			clk_enabled;
 
-	u32			init_speed;
+	u32			init_speed, oper_speed;
 	int			irq;
 	u8			irq_polarity;
 
 #ifdef CONFIG_PM
 	struct hci_uart		*hu;
 	bool			is_suspended; /* suspend/resume flag */
+#endif
+#ifdef CONFIG_ACPI
+	acpi_handle		btlp, btpu, btpd;
 #endif
 };
 
@@ -78,6 +82,42 @@ struct bcm_data {
 /* List of BCM BT UART devices */
 static DEFINE_MUTEX(bcm_device_lock);
 static LIST_HEAD(bcm_device_list);
+
+#ifdef CONFIG_ACPI
+static int bcm_apple_set_power(struct bcm_device *dev, bool enable)
+{
+	return ACPI_SUCCESS(acpi_evaluate_object(enable ? dev->btpu : dev->btpd,
+						 NULL, NULL, NULL));
+}
+
+static int bcm_apple_set_device_wake(struct bcm_device *dev, bool enable)
+{
+	return ACPI_SUCCESS(acpi_execute_simple_method(dev->btlp,
+						       NULL, enable));
+}
+
+static bool bcm_apple_probe(struct bcm_device *dev)
+{
+	struct acpi_device *adev = ACPI_COMPANION(&dev->pdev->dev);
+	acpi_handle dev_handle = adev->handle;
+	const union acpi_object *obj;
+
+	if (!acpi_dev_get_property(adev, "baud", ACPI_TYPE_BUFFER, &obj) &&
+	    obj->buffer.length == 8)
+		dev->oper_speed = *(u64 *)obj->buffer.pointer;
+
+	return ACPI_SUCCESS(acpi_get_handle(dev_handle, "BTLP", &dev->btlp)) &&
+	       ACPI_SUCCESS(acpi_get_handle(dev_handle, "BTPU", &dev->btpu)) &&
+	       ACPI_SUCCESS(acpi_get_handle(dev_handle, "BTPD", &dev->btpd));
+}
+#else
+static inline int bcm_apple_set_power(struct bcm_device *dev, bool powered)
+{ return -EINVAL; }
+static inline int bcm_apple_set_device_wake(struct bcm_device *dev, bool enable)
+{ return -EINVAL; }
+static inline bool bcm_apple_probe(struct bcm_device *dev)
+{ return -EINVAL; }
+#endif
 
 static int bcm_set_baudrate(struct hci_uart *hu, unsigned int speed)
 {
@@ -145,11 +185,19 @@ static bool bcm_device_exists(struct bcm_device *device)
 
 static int bcm_gpio_set_power(struct bcm_device *dev, bool powered)
 {
+	int err;
+
 	if (powered && !IS_ERR(dev->clk) && !dev->clk_enabled)
 		clk_prepare_enable(dev->clk);
 
-	gpiod_set_value(dev->shutdown, powered);
-	gpiod_set_value(dev->device_wakeup, powered);
+	if (!x86_apple_machine) {
+		gpiod_set_value(dev->shutdown, powered);
+		gpiod_set_value(dev->device_wakeup, powered);
+	} else {
+		err = bcm_apple_set_power(dev, powered);
+		if (err)
+			return err;
+	}
 
 	if (!powered && !IS_ERR(dev->clk) && dev->clk_enabled)
 		clk_disable_unprepare(dev->clk);
@@ -157,6 +205,16 @@ static int bcm_gpio_set_power(struct bcm_device *dev, bool powered)
 	dev->clk_enabled = powered;
 
 	return 0;
+}
+
+static int bcm_gpio_set_device_wake(struct bcm_device *dev, bool enable)
+{
+	if (!x86_apple_machine) {
+		gpiod_set_value(dev->device_wakeup, enable);
+		return 0;
+	} else {
+		return bcm_apple_set_device_wake(dev, enable);
+	}
 }
 
 #ifdef CONFIG_PM
@@ -301,6 +359,7 @@ static int bcm_open(struct hci_uart *hu)
 		if (hu->tty->dev->parent == dev->pdev->dev.parent) {
 			bcm->dev = dev;
 			hu->init_speed = dev->init_speed;
+			hu->oper_speed = dev->oper_speed;
 #ifdef CONFIG_PM
 			dev->hu = hu;
 #endif
@@ -522,7 +581,7 @@ static int bcm_suspend_device(struct device *dev)
 
 	/* Suspend the device */
 	if (bdev->device_wakeup) {
-		gpiod_set_value(bdev->device_wakeup, false);
+		bcm_gpio_set_device_wake(bdev, false);
 		bt_dev_dbg(bdev, "suspend, delaying 15 ms");
 		mdelay(15);
 	}
@@ -537,7 +596,7 @@ static int bcm_resume_device(struct device *dev)
 	bt_dev_dbg(bdev, "");
 
 	if (bdev->device_wakeup) {
-		gpiod_set_value(bdev->device_wakeup, true);
+		bcm_gpio_set_device_wake(bdev, true);
 		bt_dev_dbg(bdev, "resume, delaying 15 ms");
 		mdelay(15);
 	}
@@ -747,7 +806,9 @@ static int bcm_platform_probe(struct bcm_device *dev)
 	/* Make sure at-least one of the GPIO is defined and that
 	 * a name is specified for this instance
 	 */
-	if ((!dev->device_wakeup && !dev->shutdown) || !dev->name) {
+	if ((!dev->device_wakeup && !dev->shutdown &&
+	     (!x86_apple_machine || !bcm_apple_probe(dev))) ||
+	    !dev->name) {
 		dev_err(&pdev->dev, "invalid platform data\n");
 		return -EINVAL;
 	}
