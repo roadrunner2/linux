@@ -118,7 +118,8 @@ static bool bcm_apple_probe(struct bcm_device *dev)
 
 	if (!acpi_dev_get_property(adev, "baud", ACPI_TYPE_BUFFER, &obj) &&
 	    obj->buffer.length == 8) {
-		dev->oper_speed = *(u64 *)obj->buffer.pointer;
+		dev->init_speed = *(u64 *)obj->buffer.pointer;
+		dev->oper_speed = dev->init_speed;
 		dev_info(&dev->pdev->dev, "oper_speed=%u\n", dev->oper_speed);
 	}
 
