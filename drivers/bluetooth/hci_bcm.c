@@ -630,7 +630,7 @@ static int bcm_suspend_device(struct device *dev)
 	}
 
 	/* Suspend the device */
-	if (bdev->device_wakeup) {
+	if (bdev->device_wakeup || x86_apple_machine) {
 		bcm_gpio_set_device_wake(bdev, false);
 		bt_dev_dbg(bdev, "suspend, delaying 15 ms");
 		mdelay(15);
@@ -645,7 +645,7 @@ static int bcm_resume_device(struct device *dev)
 
 	bt_dev_dbg(bdev, "");
 
-	if (bdev->device_wakeup) {
+	if (bdev->device_wakeup || x86_apple_machine) {
 		bcm_gpio_set_device_wake(bdev, true);
 		bt_dev_dbg(bdev, "resume, delaying 15 ms");
 		mdelay(15);
