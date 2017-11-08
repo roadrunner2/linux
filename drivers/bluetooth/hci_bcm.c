@@ -433,7 +433,8 @@ static int bcm_close(struct hci_uart *hu)
 		pm_runtime_set_suspended(&bdev->pdev->dev);
 
 		if (device_can_wakeup(&bdev->pdev->dev)) {
-			devm_free_irq(&bdev->pdev->dev, bdev->irq, bdev);
+			if (bdev->irq > 0)
+				devm_free_irq(&bdev->pdev->dev, bdev->irq, bdev);
 			device_init_wakeup(&bdev->pdev->dev, false);
 		}
 
