@@ -64,6 +64,18 @@ config APDS9960
 	  To compile this driver as a module, choose M here: the
 	  module will be called apds9960
 
+config APPLE_IBRIDGE_ALS
+	tristate "Apple iBridge ambient light sensor"
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	depends on MFD_APPLE_IBRIDGE
+	help
+	  Say Y here to build the driver for the Apple iBridge ALS
+	  sensor.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called apple-ib-als.
+
 config BH1750
 	tristate "ROHM BH1750 ambient light sensor"
 	depends on I2C
