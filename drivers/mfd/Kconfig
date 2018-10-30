@@ -1915,5 +1915,18 @@ config RAVE_SP_CORE
 	  Select this to get support for the Supervisory Processor
 	  device found on several devices in RAVE line of hardware.
 
+config MFD_APPLE_IBRIDGE
+	tristate "Apple iBridge chip"
+	depends on (X86 && ACPI && USB_HID) || COMPILE_TEST
+	select MFD_CORE
+	help
+	  This MFD provides the core support for the Apple iBridge chip
+	  found on recent MacBookPro's. The drivers for the Touch Bar
+	  (apple-ib-tb) and light sensor (apple-ib-als) need to be
+	  enabled separately.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called apple-ibridge.
+
 endmenu
 endif
