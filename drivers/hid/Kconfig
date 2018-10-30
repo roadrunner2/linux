@@ -135,6 +135,16 @@ config HID_APPLE
 	Say Y here if you want support for keyboards of	Apple iBooks, PowerBooks,
 	MacBooks, MacBook Pros and Apple Aluminum.
 
+config HID_APPLE_IBRIDGE_TB
+	tristate "Apple iBridge Touch Bar"
+	depends on MFD_APPLE_IBRIDGE
+	---help---
+	Say Y here if you want support for the Touch Bar on recent
+	MacBook Pros.
+
+	To compile this driver as a module, choose M here: the
+	module will be called apple-ib-tb.
+
 config HID_APPLEIR
 	tristate "Apple infrared receiver"
 	depends on (USB_HID)
